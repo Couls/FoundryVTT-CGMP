@@ -14,7 +14,8 @@
 const PACKET_HEADER = {
 	OTHER: 0,
 	TYPING_MESSAGE: 1,
-	TYPING_END: 2
+	TYPING_END: 2,
+	FORCED_PACKET: 3
 }
 
 const REMOTE_TYPING_TIMEOUT = 5000;
@@ -23,7 +24,6 @@ const TYPING_EMIT_INTERVAL = 250;
 export class TypingNotifier {
 
 	static typingUsers = new Map();
-
 	constructor(chatLogElement, allowPlayersToSeeTypingNotification) {
 		this._lastPacketSent = null;
 		this._allowPlayersToSeeTypingNotification = allowPlayersToSeeTypingNotification;
@@ -36,7 +36,8 @@ export class TypingNotifier {
 		this._notifyWrapperElement.className = "hidden";
 		this._notifyWrapperElement.innerHTML = '<span class="dots-cont"><span class="dot dot-1"></span><span class="dot dot-2"></span><span class="dot dot-3"></span></span>';
 		this._notifyWrapperElement.appendChild(this._notifySpan);
-
+		this.ooccommand = false;
+		this.asstring;
 		// If Mobile Improvements is enabled, then we need to use a wrapper for ChatLog._onChatKeyDown(),
 		// as clicking the send button does not generate a keydown event.
 		if (game.modules.get("mobile-improvements")?.active)
@@ -123,19 +124,57 @@ export class TypingNotifier {
 	}
 
 	_emitTypingEnd() {
+		if(canvas.tokens.controlled[0])
+		{
 		game.socket.emit('module.CautiousGamemastersPack', {
 			header: PACKET_HEADER.TYPING_END,
-			user: game.user.id
+			user: game.user.id,
+			token: canvas.tokens.controlled[0].id,
+			ooccommand: this.ooccommand,
+			asstring: this.asstring
 		});
+		}
+		else {
+			game.socket.emit('module.CautiousGamemastersPack', {
+				header: PACKET_HEADER.TYPING_END,
+				user: game.user.id,
+				ooccommand: this.ooccommand,
+				asstring: this.asstring
+			});
+		}
+		this.asstring = null;
+		this.ooccommand = false;
 		this._lastPacketSent = undefined;
+	}
+	_ForceEmit() {
+		game.socket.emit('module.CautiousGamemastersPack', {
+			header: PACKET_HEADER.FORCED_PACKET,
+			user: game.user.id,
+			ooccommand: this.ooccommand,
+			asstring: this.asstring
+		});			
 	}
 
 	_emitTyping() {
 		if (this._lastPacketSent && new Date().getTime - this._lastPacketSent < TYPING_EMIT_INTERVAL) return;
-		game.socket.emit('module.CautiousGamemastersPack', {
+		if(canvas.tokens.controlled[0])
+		{
+			game.socket.emit('module.CautiousGamemastersPack', {
 			header: PACKET_HEADER.TYPING_MESSAGE,
-			user: game.user.id
+			user: game.user.id,
+			token: canvas.tokens.controlled[0].id,
+			ooccommand: this.ooccommand,
+			asstring: this.asstring
 		});
+		}
+		else {
+			game.socket.emit('module.CautiousGamemastersPack', {
+				header: PACKET_HEADER.TYPING_MESSAGE,
+				user: game.user.id,
+				ooccommand: this.ooccommand,
+				asstring: this.asstring
+			});			
+		}
 		this._lastPacketSent = new Date().getTime;
 	}
 
@@ -175,6 +214,26 @@ export class TypingNotifier {
 
 	_onChatKeyDown(event) {
 		const key = (event.key ?? event.code).toUpperCase();
+		if (event.currentTarget.value[0] == "/" && !this.asstring)
+		{
+			if(event.currentTarget.value.includes("/ooc")) 
+			{
+				this.ooccommand = true;
+			}
+ 			if(game.user.isGM && event.currentTarget.value.includes("/as"))
+			{
+				if(event.currentTarget.value.includes('"', 5))
+				{
+					this.asstring = event.currentTarget.value.slice(
+						event.currentTarget.value.indexOf('"') + 1,
+						event.currentTarget.value.lastIndexOf('"'),
+					);
+					console.log(this.asstring);
+					this._ForceEmit();
+					return;
+				}
+			}
+		}
 		if (((key === "ENTER") || (key === "NUMPADENTER")) && !event.shiftKey) {
 			this._emitTypingEnd();
 		} else if (this._willDeleteLastChar(key, event.currentTarget)) {
@@ -189,7 +248,7 @@ export class TypingNotifier {
 		wrapper(event);
 	}
 
-	updateNotice() {
+	updateNotice(tokenid, asstring, ooccommand) {
 		if (!this._notifyWrapperElement) return;
 		const mapSize = TypingNotifier.typingUsers.size;
 		if (mapSize === 0) {
@@ -202,7 +261,36 @@ export class TypingNotifier {
 		let users = [];
 
 		TypingNotifier.typingUsers.forEach((value, key) => {
-			users.push(game.users.get(key).name);
+			let token;
+			if(tokenid)
+			{
+				token = canvas.tokens.get(tokenid);
+				tokenid = null;
+			}
+			if(asstring) // first check if GM is using /as
+			{
+				users.push(asstring);
+				this.asstring = null;
+			}
+			else if(ooccommand) // check if /ooc
+			{
+				users.push(game.users.get(key).name);
+				this.ooccommand = false;
+			}
+			else if(!token) // check if no token controlled
+			{
+				users.push(game.users.get(key).name);
+			}
+			else if(token) // finally check if token is controlled
+			{
+				users.push(token.name);
+				token = null;
+				//console.log(token);
+			}
+			else { // this shouldn't happen at all
+				console.log("You should never see this: No token, no ooccommand, no asstring");
+				return;
+			}
 			cnt++;
 		});
 
@@ -241,9 +329,9 @@ export class TypingNotifierManager {
 		this.updateNotice();
 	}
 
-	updateNotice() {
+	updateNotice(tokenid, asstring, ooccommand) {
 		for (const notifier of Object.values(this._notifiers)) {
-			notifier.updateNotice();
+			notifier.updateNotice(tokenid, asstring, ooccommand);
 		}
 	}
 
@@ -260,12 +348,14 @@ export class TypingNotifierManager {
 				if (!debouncedOnRemoteTypingEnded) {
 					debouncedOnRemoteTypingEnded = debounce(() => this._onRemoteTypingEnded(id), REMOTE_TYPING_TIMEOUT);
 					TypingNotifier.typingUsers.set(id, debouncedOnRemoteTypingEnded);
-					this.updateNotice();
+					this.updateNotice(data.token, data.asstring, data.ooccommand);
 				}
 
 				debouncedOnRemoteTypingEnded();
 				break;
-
+			case PACKET_HEADER.FORCED_PACKET:
+				this._onRemoteTypingEnded(id);
+				break;
 			case PACKET_HEADER.TYPING_END:
 				this._onRemoteTypingEnded(id);
 				break;

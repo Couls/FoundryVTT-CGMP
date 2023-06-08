@@ -19,7 +19,8 @@ export const CGMP_OPTIONS = {
 	HIDE_NPC_HEALING_TEXT: "hideNpcHealingText",
 	NOTIFY_TYPING: "notifyTyping",
 	ALLOW_PLAYERS_TO_SEE_TYPING_NOTIFICATION: "allowPlayersToSeeTypingNotification",
-	PLAYER_SPEAKER_MODE: "playerSpeakerMode"
+	PLAYER_SPEAKER_MODE: "playerSpeakerMode",
+	AS_COMMAND_ENABLED: "useAsCommand"
 };
 
 const CGMP_LEGACY_OPTIONS = {
@@ -31,8 +32,7 @@ export const CGMP_SPEAKER_MODE = {
 	DEFAULT: 0,
 	DISABLE_GM_AS_PC: 1,
 	FORCE_IN_CHARACTER: 2,
-	ALWAYS_OOC: 3,
-	IN_CHARACTER_ALWAYS_ASSIGNED: 4
+	ALWAYS_OOC: 3
 };
 
 export class CGMPSettings {
@@ -44,13 +44,11 @@ export class CGMPSettings {
 			[CGMP_SPEAKER_MODE.DEFAULT]: game.i18n.localize("cgmp.speaker-mode.default-s"),
 			[CGMP_SPEAKER_MODE.DISABLE_GM_AS_PC]: game.i18n.localize("cgmp.speaker-mode.disable-gm-as-pc-s"),
 			[CGMP_SPEAKER_MODE.FORCE_IN_CHARACTER]: game.i18n.localize("cgmp.speaker-mode.force-in-character-s"),
-			[CGMP_SPEAKER_MODE.ALWAYS_OOC]: game.i18n.localize("cgmp.speaker-mode.always-ooc-s"),
-			[CGMP_SPEAKER_MODE.IN_CHARACTER_ALWAYS_ASSIGNED]: game.i18n.localize("cgmp.speaker-mode.in-character-always-assigned-s"),
+			[CGMP_SPEAKER_MODE.ALWAYS_OOC]: game.i18n.localize("cgmp.speaker-mode.always-ooc-s")
 		};
 
 		const playerSpeakerModeChoices = deepClone(gmSpeakerModeChoices);
 		delete playerSpeakerModeChoices[CGMP_SPEAKER_MODE.DISABLE_GM_AS_PC];
-		////delete gmSpeakerModeChoices[CGMP_SPEAKER_MODE.IN_CHARACTER_ALWAYS_ASSIGNED]; // it's kinda weird for GMs, but if someone has a use case, more power to them.
 
 		const debouncedReload = debounce(() => window.location.reload(), 500);
 
@@ -147,6 +145,15 @@ export class CGMPSettings {
 			type: Boolean,
 			onChange: () => debouncedReload()
 		});
+
+		game.settings.register("CautiousGamemastersPack", CGMP_OPTIONS.AS_COMMAND_ENABLED, {
+			name: "CGMP As Command",
+			scope: "world",
+			config: true,
+			default: true,
+			type: Boolean,
+			onChange: () => debouncedReload()
+		})
 	}
 
 	static convertGmSpeakerModeLegacySetting() {
