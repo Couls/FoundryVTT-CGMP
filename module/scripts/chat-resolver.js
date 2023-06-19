@@ -43,17 +43,18 @@ export class ChatResolver {
 				match[2] = ChatResolver.DESCRIPTION_SPEAKER_ALIAS;
 				chatData.flags ??= {};
 				chatData.flags.cgmp = { subType: ChatResolver.CHAT_MESSAGE_SUB_TYPES.DESC };
+				chatData.type = CONST.CHAT_MESSAGE_TYPES.OOC;
 				// Fall through...
 
 			case "as":
-				if (!chatData.flags?.cgmp && !game.user.isGM) return true;
+				if (!chatData.flags?.cgmp && !game.user.isGM || !CGMPSettings.getSetting(CGMP_OPTIONS.AS_COMMAND_ENABLED)) return true;
 
 				// Remove quotes or brackets around the speaker's name.
 				const alias = match[2].replace(/^["'\(\[](.*?)["'\)\]]$/, '$1');
 
 				chatData.flags ??= {};
 				chatData.flags.cgmp ??= { subType: ChatResolver.CHAT_MESSAGE_SUB_TYPES.AS };
-				chatData.type = CONST.CHAT_MESSAGE_TYPES.IC;
+				if(chatData.flags.cgmp.subType != ChatResolver.CHAT_MESSAGE_SUB_TYPES.DESC) chatData.type = CONST.CHAT_MESSAGE_TYPES.IC;
 				chatData.speaker = { alias: alias, scene: game.user.viewedScene };
 				chatData.content = match[3].replace(/\n/g, "<br>");
 
@@ -138,10 +139,7 @@ export class ChatResolver {
 		});
 	}
 
-	static _convertToInCharacter(messageData, onlyIfAlreadyInCharacter = false) {
-		if (onlyIfAlreadyInCharacter && (CONST.CHAT_MESSAGE_TYPES.IC !== messageData.type))
-			return;
-
+	static _convertToInCharacter(messageData) {
 		const user = (messageData.user instanceof User ? messageData.user : game.users.get(messageData.user));
 		const actor = user.character;
 		const speaker = actor ? ChatMessage.getSpeaker({ actor }) : { actor: null, alias: user.name, token: null };
@@ -209,10 +207,6 @@ export class ChatResolver {
 
 			case CGMP_SPEAKER_MODE.FORCE_IN_CHARACTER:
 				this._convertToInCharacter(messageData);
-				break;
-
-			case CGMP_SPEAKER_MODE.IN_CHARACTER_ALWAYS_ASSIGNED:
-				this._convertToInCharacter(messageData, true);
 				break;
 
 			case CGMP_SPEAKER_MODE.ALWAYS_OOC:
